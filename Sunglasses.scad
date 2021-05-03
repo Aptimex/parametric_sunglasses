@@ -8,18 +8,24 @@ l = 56;      // length of chord of the curve
 dh = 5-1;           // delta height of the curve
 sphere_r = 100; //Calculate from length (chord) and height
 
+poff_x = -2; //profile offsets to center lens on sphere
+poff_y = -4;
+lens_mirror_offset = 2.6; //use find_lens_offset() to find this value
+
 frame_thickness = 3; //should be at least 3x the lens thickness (h)
 lens_frame_overlap = 1; //distance the frame overlaps the lens to hold it in place
-lens_outline = 2; //distance between edge of lense and edge of frame (not including lens overlap)
-lens_thickness_multiplier = 1.5; //allows additional space between the frame overlaps and lens
+lens_outline = 3; //distance between edge of lense and edge of frame (not including lens overlap)
+lens_thickness_space = 1.5; //allows additional space between the frame overlaps and lens
 bridge = 18; //distance between lenses (including lens_outline)
-bridge_thickness = 7;
+bridge_thickness = 10;
 
-frame_scale = 1+(lens_outline / min(l,w));
-echo(str("frame_scale = ", frame_scale));
+frame_scale_l = 1+(lens_outline / l); //calculate scale factor to achieve target outline thickness
+frame_scale_w = 1+(lens_outline / w);
+//echo(str("frame_scale = ", frame_scale));
 
-lense_hole_scale = 1-(lens_frame_overlap / min(l,w));
-echo(str("lense_hole_scale = ", lense_hole_scale));
+lens_hole_scale_l = 1-(lens_frame_overlap / l);
+lens_hole_scale_w = 1-(lens_frame_overlap / w);
+//echo(str("lens_hole_scale = ", lens_hole_scale));
 
 /*
 module curve(width, height, length, dh) {
@@ -34,18 +40,24 @@ module curve(width, height, length, dh) {
 //curve(w, h, l, dh);
 */
 
-module surface(thickness=h) {
-    difference() {
-        sphere(sphere_r);
-        sphere(sphere_r - thickness);
-        //cube([sphere_r*sphere_r,sphere_r*sphere_r,sphere_r* sphere_r]);
-    }
+// Generate a sphereical surface with a particular thickness; radius = outer face
+module s_surface(thickness=h) {
+    translate([-1*poff_x, -1*poff_y, thickness/2]) //thickness/2 ensures all curves share same center shell
+        difference() {
+            sphere(sphere_r);
+            sphere(sphere_r - thickness);
+            //cube([sphere_r*sphere_r,sphere_r*sphere_r,sphere_r* sphere_r]);
+        }
 }
 
+// Generate a lens profile, scaled in Z to allow intersection with sphere surface
 module profile() {
-    //cube(size=[l, w, sphere_r], center=true);
-    translate([-2, -4, 0])
-        scale([1, 1, sphere_r]) import("lens_sized.stl");
+    //Use translate here (and commenout on the one for the s_surface() in make_lense()) to get lens to lay "flat" against the XY plane. Then use the those offsets *-1 to translate the sphere to the correct location, allowing the frame to remain centered.
+    
+    //translate([poff_x, poff_y, 0])
+        scale([1, 1, sphere_r+h])
+        import("lens_sized.stl");
+    
     /*
     linear_extrude(height=sphere_r, center=true, convexity=10, twist=0) {
         import("lens.svg");
@@ -53,62 +65,94 @@ module profile() {
     */
 }
 
-module make_lens() {
-    translate([0,0,-(sphere_r - dh)])
+// Intersect lens profile with sphere to create accurate curved lens shape
+//sx and sy are scaling factors to make it bigger; sz sets the lens thickness (not a scalar)
+module make_lens(sx=1, sy=1, sz=h) {
+    translate([0,0,-(sphere_r - dh)]) //Get the edges close to the XY plane
         intersection() {
-            surface();
-            //square(size = [height, width], center = true);
-            translate([0,0,sphere_r/2]) profile();
+            s_surface(sz);
+            //translate([0,0,sphere_r/2])
+            scale([sx, sy, 1]) profile();
     };
 }
 
+
+//Generate a floor on the XY plane; useful for making sure the lens is laying "flat"
 module floor() {
-    translate([0, 0, -2]) cube(size=[235, 235, 4], center=true);
+    floor_thickness = 4;
+    translate([0, 0, floor_thickness/2]) cube(size=[235, 235, floor_thickness], center=true);
 }
 
+// Generates the basic shape of the frame for one lens, matching the curvature of the lens
 module frame_curve(f_thick = frame_thickness) {
     translate([0,0,-(sphere_r - dh)])
         intersection() {
-            surface(f_thick);
+            s_surface(f_thick);
             //translate([-.5,.5,sphere_r/2]) cube(size=[l+3, w+3, sphere_r], center=true);
-            translate([-.5,.5,sphere_r/2]) scale([frame_scale, frame_scale, 1])  profile();
+            scale([frame_scale_l, frame_scale_w, 1])
+                profile(); //scale to add lens_outline thickness to edges
     };
 }
-//scale([1.5, 1.5, 3])  make_lens();
 
+//
 module lens_frame() {
+    /*
     x = -.5;
     y = .5;
     z = -2;
+    */
+    x = 0;
+    y = 0;
+    z = 0;
     difference() {
         frame_curve();
         
-        //translate([0, 0, -.1]) scale([1, 1, 1.01]) make_lens();
-        translate([0, 0, -10]) scale([lense_hole_scale, lense_hole_scale, 10]) profile(); //view hole
-        translate([x, y, z]) scale([1.03, 1.03, lens_thickness_multiplier]) make_lens(); //inside cutout to hold lense
+        translate([0, 0, -5])
+            scale([lens_hole_scale_l, lens_hole_scale_w, 10])
+                profile(); //view hole
+        //translate([x, y, z]) scale([1.03, 1.03, lens_thickness_space]) make_lens(); //inside cutout to hold lense
+        make_lens(1.01, 1.01, lens_thickness_space); //inside cutout to hold lense
     }
+    /*
     difference() { //extend to floor
-        translate([-.5,.5,-4.8]) scale([frame_scale, frame_scale, 8/sphere_r]) profile();
-        translate([0, 0, -10]) scale([lense_hole_scale, lense_hole_scale, 2]) profile(); //view hole
-        translate([x, y, z]) scale([1.03, 1.03, lens_thickness_multiplier]) make_lens(); //inside cutout to hold lense
+        translate([-.5,.5,-4.8]) scale([frame_scale_l, frame_scale_w, 8/sphere_r]) profile();
+        translate([0, 0, -10]) scale([lens_hole_scale_l, lens_hole_scale_w, 2]) profile(); //view hole
+        translate([x, y, z]) scale([1.03, 1.03, lens_thickness_space]) make_lens(); //inside cutout to hold lense
+        translate([0, 0, 5]) scale([1.01, 1.01, 1]) frame_curve(5); //remove top
+    }
+    */
+    
+    difference() { //extend to floor (make flat printable surcace)
+        translate([0,0,-3.1]) scale([frame_scale_l, frame_scale_w, 8/sphere_r]) profile();
+        translate([0, 0, -5]) scale([lens_hole_scale_l, lens_hole_scale_w, 2]) profile(); //view hole
+        make_lens(1.01, 1.01, lens_thickness_space); //inside cutout to hold lense
         translate([0, 0, 5]) scale([1.01, 1.01, 1]) frame_curve(5); //remove top
     }
 }
 
+// Helper module; Adjust off until the two lenses are just barely touching; use this value as the lens_mirror_offset
+module find_lens_offset(off = 0) {
+    make_lens();
+    translate([l+off, 0, 0])
+        mirror([1, 0, 0]) make_lens(); //left
+}
+
 module lens_frames() {
     lens_frame(); //right
-    translate([l+bridge, 0, 0]) mirror([1, 0, 0]) lens_frame(); //left
+    translate([l+lens_mirror_offset+bridge, 0, 0])
+        mirror([1, 0, 0]) lens_frame(); //left
+    
 }
 
 module make_frame() {
     lens_frames();
     
     hull() { //bridge
-        translate([l/2, 8, -4.8])
+        translate([l/2+lens_mirror_offset, 8, -3.1])
             rotate([0, 0, 5])
             cube([1, bridge_thickness, frame_thickness+1]);
         
-        translate([l/2+bridge-1, 8, -4.8])
+        translate([l/2+bridge-1, 8, -3.1])
             rotate([0, 0, -5])
             cube([1, bridge_thickness, frame_thickness+1]);
     }
@@ -135,7 +179,12 @@ difference() {
 }
 */
 
-translate([0, 0, 3.5]) make_frame();
+//translate([0, 0, 3.5])
+    make_frame();
+//make_lens(1.01, 1.01, lens_thickness_space); //inside cutout to hold lense
+//make_lens();
+//frame_curve();
+//lens_frame();
 
 
 
@@ -145,5 +194,5 @@ translate([0, 0, 3.5]) make_frame();
 
 //floor();
 
-//surface();
+//s_surface();
 //sphere(sphere_r);
