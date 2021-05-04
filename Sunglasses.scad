@@ -1,5 +1,4 @@
-//$fn= 360;
-$fn= $preview ? 50 : 100;
+$fn= $preview ? 50 : 64;
 
 //Approx. for Holbrook replacement lenses
 w = 43;       // width of rectangle
@@ -8,24 +7,32 @@ l = 56;      // length of chord of the curve
 dh = 5-1;           // delta height of the curve
 sphere_r = 100; //Calculate from length (chord) and height
 
+e=.01; //extra/error to ensure faces don't coincide
 poff_x = -2; //profile offsets to center lens on sphere
 poff_y = -4;
 lens_mirror_offset = 2.6; //use find_lens_offset() to find this value
 
-frame_thickness = 3; //should be at least 3x the lens thickness (h)
-lens_frame_overlap = 1; //distance the frame overlaps the lens to hold it in place
-lens_outline = 3; //distance between edge of lense and edge of frame (not including lens overlap)
+lens_expansion = 1.03;
+lens_expansion_abs = lens_expansion*l - l;
+frame_thickness = 2.5; //should be at least 2x the lens thickness (h)
+lens_frame_overlap = .5; //distance the frame overlaps the lens to hold it in place
+lens_outline = 2+lens_expansion_abs; //distance between edge of lense and edge of frame (not including lens overlap)
 lens_thickness_space = 1.5; //allows additional space between the frame overlaps and lens
-bridge = 18; //distance between lenses (including lens_outline)
+//bridge = 18; //distance between lenses (including lens_outline)
+bridge = 15; //distance between lenses (including lens_outline)
 bridge_thickness = 10;
+
+extend_to_floor = -frame_thickness+.5;
 
 frame_scale_l = 1+(lens_outline / l); //calculate scale factor to achieve target outline thickness
 frame_scale_w = 1+(lens_outline / w);
-//echo(str("frame_scale = ", frame_scale));
+echo(str("frame_scale_l = ", frame_scale_l));
+echo(str("frame_scale_w = ", frame_scale_w));
 
 lens_hole_scale_l = 1-(lens_frame_overlap / l);
 lens_hole_scale_w = 1-(lens_frame_overlap / w);
-//echo(str("lens_hole_scale = ", lens_hole_scale));
+echo(str("lens_hole_scale_l = ", lens_hole_scale_l));
+echo(str("lens_hole_scale_w = ", lens_hole_scale_w));
 
 /*
 module curve(width, height, length, dh) {
@@ -111,23 +118,31 @@ module lens_frame() {
             scale([lens_hole_scale_l, lens_hole_scale_w, 10])
                 profile(); //view hole
         //translate([x, y, z]) scale([1.03, 1.03, lens_thickness_space]) make_lens(); //inside cutout to hold lense
-        make_lens(1.01, 1.01, lens_thickness_space); //inside cutout to hold lense
+        make_lens(lens_expansion, lens_expansion, lens_thickness_space); //inside cutout to hold lense
+        
+        //flatten bottom
+        translate([0, 0, -5+extend_to_floor]) cube(size=[235, 235, 10], center=true);
     }
+    //translate([0, 0, -5+extend_to_floor]) cube(size=[235, 235, 10], center=true);
     /*
     difference() { //extend to floor
         translate([-.5,.5,-4.8]) scale([frame_scale_l, frame_scale_w, 8/sphere_r]) profile();
         translate([0, 0, -10]) scale([lens_hole_scale_l, lens_hole_scale_w, 2]) profile(); //view hole
         translate([x, y, z]) scale([1.03, 1.03, lens_thickness_space]) make_lens(); //inside cutout to hold lense
-        translate([0, 0, 5]) scale([1.01, 1.01, 1]) frame_curve(5); //remove top
+        translate([0, 0, 5]) scale([1.03, 1.03, 1]) frame_curve(5); //remove top
     }
     */
     
-    difference() { //extend to floor (make flat printable surcace)
-        translate([0,0,-3.1]) scale([frame_scale_l, frame_scale_w, 8/sphere_r]) profile();
+    difference() { //extend to floor (make flat printable surface)
+        translate([0,0,extend_to_floor]) scale([frame_scale_l, frame_scale_w, 8/sphere_r]) profile();
         translate([0, 0, -5]) scale([lens_hole_scale_l, lens_hole_scale_w, 2]) profile(); //view hole
-        make_lens(1.01, 1.01, lens_thickness_space); //inside cutout to hold lense
-        translate([0, 0, 5]) scale([1.01, 1.01, 1]) frame_curve(5); //remove top
+        make_lens(lens_expansion, lens_expansion, lens_thickness_space); //inside cutout to hold lense
+        translate([0, 0, frame_thickness*2+1]) scale([1+e, 1+e, 1]) frame_curve(10); //remove top
+        
+        //flatten bottom
+        translate([0, 0, -5+extend_to_floor]) cube(size=[235, 235, 10], center=true);
     }
+    
 }
 
 // Helper module; Adjust off until the two lenses are just barely touching; use this value as the lens_mirror_offset
@@ -148,13 +163,13 @@ module make_frame() {
     lens_frames();
     
     hull() { //bridge
-        translate([l/2+lens_mirror_offset, 8, -3.1])
-            rotate([0, 0, 5])
-            cube([1, bridge_thickness, frame_thickness+1]);
+        translate([l/2+lens_mirror_offset, 8, extend_to_floor])
+            //rotate([0, 0, 5])
+            cube([1, bridge_thickness, frame_thickness]);
         
-        translate([l/2+bridge-1, 8, -3.1])
-            rotate([0, 0, -5])
-            cube([1, bridge_thickness, frame_thickness+1]);
+        translate([l/2+bridge-1, 8, extend_to_floor])
+            //rotate([0, 0, -5])
+            cube([1, bridge_thickness, frame_thickness]);
     }
 }
 
@@ -180,11 +195,11 @@ difference() {
 */
 
 //translate([0, 0, 3.5])
-    make_frame();
-//make_lens(1.01, 1.01, lens_thickness_space); //inside cutout to hold lense
+    //make_frame();
+//make_lens(lens_expansion, lens_expansion, lens_thickness_space); //inside cutout to hold lense
 //make_lens();
 //frame_curve();
-//lens_frame();
+mirror([1, 0, 0]) lens_frame();
 
 
 
